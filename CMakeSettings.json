@@ -1,0 +1,17 @@
+﻿{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "vcpkg-windows",
+      "displayName": "Windows x64 (vcpkg)",
+      "description": "vcpkgのツールチェーンファイルを使用したWindows向け設定",
+      "generator": "Visual Studio 17 2022",
+      "binaryDir": "${sourceDir}/build",
+      "architecture": "x64",
+      "cacheVariables": {
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/vcpkg/scripts/buildsystems/vcpkg.cmake"
+      }
+    }
+  ]
+}
+

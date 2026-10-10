@@ -1,0 +1,26 @@
+﻿{
+  "name": "yamaneko-engine",
+  "version-string": "0.1.0",
+  "dependencies": [
+    "sdl2",
+    "sdl2-image",
+    "sdl2-ttf",
+    "glad",
+    {
+      "name": "imgui",
+      "features": [
+        "sdl2-binding",
+        "opengl3-binding"
+      ]
+    },
+    "assimp",
+    "opengl"
+  ],
+  "overrides": [
+    {
+      "name": "imgui",
+      "version": "1.91.8#2"
+    }
+  ],
+  "builtin-baseline": "114d9fe62faf35856b45cf55cb93b57028a45d63"
+}
