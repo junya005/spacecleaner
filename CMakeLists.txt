@@ -1,10 +1,10 @@
-cmake_minimum_required(VERSION 3.15)
+﻿cmake_minimum_required(VERSION 3.15)
 
 set(CMAKE_TOOLCHAIN_FILE "${CMAKE_CURRENT_SOURCE_DIR}/vcpkg/scripts/buildsystems/vcpkg.cmake" CACHE STRING "")
 
-project(QTSRPG CXX)
+project(YamanekoEngineProject CXX)
 
-set(TARGET_NAME QTSRPG)
+set(TARGET_NAME YamanekoEngineProject)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

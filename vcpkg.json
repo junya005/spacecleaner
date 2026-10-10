@@ -5,7 +5,9 @@
     "sdl2",
     "sdl2-image",
     "sdl2-ttf",
+    "opengl",
     "glad",
+    "glm",
     {
       "name": "imgui",
       "features": [
@@ -13,8 +15,7 @@
         "opengl3-binding"
       ]
     },
-    "assimp",
-    "opengl"
+    "assimp"
   ],
   "overrides": [
     {
