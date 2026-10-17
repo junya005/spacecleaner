@@ -18,17 +18,35 @@ namespace Engine {
 			glm::vec3 rotation; // ラジアン単位
 			glm::vec3 scale;
 			Transform() : position(0.0f, 0.0f, 0.0f), rotation(0.0f, 0.0f, 0.0f), scale(1.0f, 1.0f, 1.0f) {}
+
+			glm::mat4 GetRotationMatrix() const {
+				glm::mat4 rot = glm::mat4(1.0f);
+				rot = glm::rotate(rot, rotation.y, glm::vec3(0.0f, 1.0f, 0.0f));
+				rot = glm::rotate(rot, rotation.x, glm::vec3(1.0f, 0.0f, 0.0f));
+				rot = glm::rotate(rot, rotation.z, glm::vec3(0.0f, 0.0f, 1.0f));
+				return rot;
+			}
+
+			glm::vec3 GetForwardVector() const {
+				return glm::vec3(GetRotationMatrix() * glm::vec4(0.0f, 0.0f, -1.0f, 0.0f));
+			}
+
+			glm::vec3 GetUpVector() const {
+				return glm::vec3(GetRotationMatrix() * glm::vec4(0.0f, 1.0f, 0.0f, 0.0f));
+			}
+
+			glm::vec3 GetRightVector() const {
+				return glm::vec3(GetRotationMatrix() * glm::vec4(1.0f, 0.0f, 0.0f, 0.0f));
+			}
+
 			glm::mat4 GetModelMatrix() const {
 				glm::mat4 model = glm::mat4(1.0f);
 				model = glm::translate(model, position);
-
-				model = glm::rotate(model, rotation.x, glm::vec3(1.0f, 0.0f, 0.0f));
-				model = glm::rotate(model, rotation.y, glm::vec3(0.0f, 1.0f, 0.0f));
-				model = glm::rotate(model, rotation.z, glm::vec3(0.0f, 0.0f, 1.0f));
-
+				model = model * GetRotationMatrix();
 				model = glm::scale(model, scale);
 				return model;
 			}
+
 	};
 
 	// ファイルを文字列でロードする関数
@@ -70,6 +88,7 @@ namespace Engine {
 		void setVec3(const std::string& name, float x, float y, float z) const;
 		void setVec4(const std::string& name, float x, float y, float z, float w) const;
 		void setMat4(const std::string& name, const glm::mat4& mat) const;
+		void setSampler2D(const std::string& name, int textureUnit) const;
 	};
 
 	Shader::Shader(const char* vertexPath, const char* fragmentPath) {
@@ -153,6 +172,10 @@ namespace Engine {
 	void Shader::setMat4(const std::string& name, const glm::mat4& mat) const {
 		glUniformMatrix4fv(glGetUniformLocation(ID, name.c_str()), 1, GL_FALSE, glm::value_ptr(mat));
 	}
+
+	void Shader::setSampler2D(const std::string& name, int textureUnit) const {
+		glUniform1i(glGetUniformLocation(ID, name.c_str()), textureUnit);
+	}
 }
 
 enum MoveDirection {
@@ -201,18 +224,23 @@ public:
 
 	void ProcessMovement(MoveDirection direction, float velocity, float deltaTime) {
 		velocity *= deltaTime; // カメラの移動速度
+
+		glm::vec3 forward = transform.GetForwardVector();
+		glm::vec3 right = transform.GetRightVector();
+		glm::vec3 up = transform.GetUpVector();
+
 		if (direction == FORWARD)
-			transform.position += glm::vec3(0.0f, 0.0f, -1.0f) * velocity;
+			transform.position += forward * velocity;
 		if (direction == BACKWARD)
-			transform.position -= glm::vec3(0.0f, 0.0f, -1.0f) * velocity;
-		if (direction == LEFT)
-			transform.position -= glm::normalize(glm::cross(glm::vec3(0.0f, 0.0f, -1.0f), glm::vec3(0.0f, 1.0f, 0.0f))) * velocity;
+			transform.position -= forward * velocity;
 		if (direction == RIGHT)
-			transform.position += glm::normalize(glm::cross(glm::vec3(0.0f, 0.0f, -1.0f), glm::vec3(0.0f, 1.0f, 0.0f))) * velocity;
+			transform.position += right * velocity;
+		if (direction == LEFT)
+			transform.position -= right * velocity;
 		if (direction == UP)
-			transform.position += glm::vec3(0.0f, 1.0f, 0.0f) * velocity;
+			transform.position += up * velocity;
 		if (direction == DOWN)
-			transform.position -= glm::vec3(0.0f, 1.0f, 0.0f) * velocity;
+			transform.position -= up * velocity;
 	}
 
 	void ProcessViewMovement(float xoffset, float yoffset) {
@@ -237,11 +265,9 @@ public:
 	}
 
 	glm::highp_mat4 GetViewMatrix() const {
-		glm::vec3 front;
-		front.x = cos(transform.rotation.y) * cos(transform.rotation.x);
-		front.y = sin(transform.rotation.x);
-		front.z = sin(transform.rotation.y) * cos(transform.rotation.x);
-		return glm::lookAt(transform.position, transform.position + glm::normalize(front), glm::vec3(0.0f, 1.0f, 0.0f));
+		glm::vec3 forward = transform.GetForwardVector();
+		glm::vec3 up = transform.GetUpVector();
+		return glm::lookAt(transform.position, transform.position + glm::normalize(forward), up);
 	}
 
 	glm::highp_mat4 GetProjectionMatrix() const {
@@ -330,7 +356,6 @@ int main(int argc, char* argv[]) {
 
 	std::unique_ptr<Camera> camera = std::make_unique<Camera>(true); // デバッグ用カメラを作成
 
-
 	glm::vec3 cameraPos(0.0f, 0.0f, 3.0f);
 	glm::vec3 cameraFront(0.0f, 0.0f, -1.0f);
 	glm::vec3 cameraUp(0.0f, 1.0f, 0.0f);
@@ -341,7 +366,6 @@ int main(int argc, char* argv[]) {
 
 	int screenWidth = Engine::Window::Width();
 	int screenHeight = Engine::Window::Height();
-
 
 	// Hello Triangle: https://learnopengl.com/Getting-started/Hello-Triangle
 
@@ -383,8 +407,19 @@ int main(int argc, char* argv[]) {
 	// 立方体の頂点バッファのバインドとデータ転送
 	glBindBuffer(GL_ARRAY_BUFFER, cubeVBO);
 	glBufferData(GL_ARRAY_BUFFER, sizeof(cube_vertices), cube_vertices, GL_STATIC_DRAW);
+	// 頂点座標の頂点属性を設定
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
 	glEnableVertexAttribArray(0);
+	// UV座標の頂点属性を設定
+	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
+	glEnableVertexAttribArray(1);
+
+	// 立方体用のテクスチャを作成
+	// テクスチャ読み込み
+	GLuint texture = Engine::AssetManager::LoadTexture("assets/texture/4K-metal_5-diffuse.jpg");
+	std::cout << "Texture ID: " << texture << std::endl;
+	
+	// 画像リソースの解放はAssetManagerが行うので、ここでは解放しない
 
 #pragma region Create Shader Program
 
@@ -473,7 +508,8 @@ int main(int argc, char* argv[]) {
 		shaderProgram->setMat4("model", model);
 		shaderProgram->setMat4("view", view);
 		shaderProgram->setMat4("projection", projection);
-		shaderProgram->setVec4("ourColor", 0.0f, 1.0f, 0.0f, 1.0f);
+		shaderProgram->setSampler2D("ourTexture", 0); // テクスチャユニット0を使用
+		shaderProgram->setVec4("ourColor", 1.0f, 1.0f, 1.0f, 1.0f);
 		
 		// Hello Triangle: 描画処理
 		shaderProgram->use();
@@ -484,6 +520,8 @@ int main(int argc, char* argv[]) {
 		// glDrawArrays(GL_TRIANGLES, 0, 3);
 
 		// 立方体の描画
+		glActiveTexture(GL_TEXTURE0); // テクスチャユニット0をアクティブにする
+		glBindTexture(GL_TEXTURE_2D, texture);
 		glBindVertexArray(cubeVAO);
 		glDrawArrays(GL_TRIANGLES, 0, 36);
 	
