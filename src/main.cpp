@@ -11,6 +11,26 @@
 #include <iostream>
 
 namespace Engine {
+
+	struct Transform {
+	public:
+			glm::vec3 position;
+			glm::vec3 rotation; // ラジアン単位
+			glm::vec3 scale;
+			Transform() : position(0.0f, 0.0f, 0.0f), rotation(0.0f, 0.0f, 0.0f), scale(1.0f, 1.0f, 1.0f) {}
+			glm::mat4 GetModelMatrix() const {
+				glm::mat4 model = glm::mat4(1.0f);
+				model = glm::translate(model, position);
+
+				model = glm::rotate(model, rotation.x, glm::vec3(1.0f, 0.0f, 0.0f));
+				model = glm::rotate(model, rotation.y, glm::vec3(0.0f, 1.0f, 0.0f));
+				model = glm::rotate(model, rotation.z, glm::vec3(0.0f, 0.0f, 1.0f));
+
+				model = glm::scale(model, scale);
+				return model;
+			}
+	};
+
 	// ファイルを文字列でロードする関数
 	inline std::string LoadFileToString(const std::string& filePath){
 		std::ifstream file(filePath);
@@ -135,6 +155,100 @@ namespace Engine {
 	}
 }
 
+enum MoveDirection {
+	FORWARD,
+	BACKWARD,
+	LEFT,
+	RIGHT,
+	UP,
+	DOWN
+};
+
+class Camera {
+public:
+	inline static Camera* current = nullptr;
+	inline static std::vector<Camera*> cameras = std::vector<Camera*>();
+
+	Engine::Transform transform;
+	float fov = 45.0f; // 視野角
+	bool for_debug = false; // デバッグ用カメラかどうか
+	float aspect_ratio = 16.0f / 9.0f; // アスペクト比
+	float near_plane = 0.1f; // 近平面距離
+	float far_plane = 100.0f; // 遠平面距離
+	
+	Camera(bool for_debug = false) : transform(), for_debug(for_debug) {
+		if(current == nullptr) {
+			current = this;
+		}
+		cameras.push_back(this);
+	}
+
+	~Camera() {
+		auto it = std::find(cameras.begin(), cameras.end(), this);
+		if (it != cameras.end()) {
+			cameras.erase(it);
+		}
+		if (current == this) {
+			current = cameras.empty() ? nullptr : cameras.back();
+		}
+
+		if (cameras.empty())
+		{
+			current = nullptr;
+			cameras.clear();
+		}
+	}
+
+	void ProcessMovement(MoveDirection direction, float velocity, float deltaTime) {
+		velocity *= deltaTime; // カメラの移動速度
+		if (direction == FORWARD)
+			transform.position += glm::vec3(0.0f, 0.0f, -1.0f) * velocity;
+		if (direction == BACKWARD)
+			transform.position -= glm::vec3(0.0f, 0.0f, -1.0f) * velocity;
+		if (direction == LEFT)
+			transform.position -= glm::normalize(glm::cross(glm::vec3(0.0f, 0.0f, -1.0f), glm::vec3(0.0f, 1.0f, 0.0f))) * velocity;
+		if (direction == RIGHT)
+			transform.position += glm::normalize(glm::cross(glm::vec3(0.0f, 0.0f, -1.0f), glm::vec3(0.0f, 1.0f, 0.0f))) * velocity;
+		if (direction == UP)
+			transform.position += glm::vec3(0.0f, 1.0f, 0.0f) * velocity;
+		if (direction == DOWN)
+			transform.position -= glm::vec3(0.0f, 1.0f, 0.0f) * velocity;
+	}
+
+	void ProcessViewMovement(float xoffset, float yoffset) {
+		float sensitivity = 0.1f; // マウス感度
+		xoffset *= sensitivity;
+		yoffset *= sensitivity;
+		transform.rotation.y += glm::radians(xoffset);
+		transform.rotation.x += glm::radians(yoffset);
+		// 上下の回転を制限
+		if (transform.rotation.x > glm::radians(89.0f))
+			transform.rotation.x = glm::radians(89.0f);
+		if (transform.rotation.x < glm::radians(-89.0f))
+			transform.rotation.x = glm::radians(-89.0f);
+	}
+
+	void ProcessZoom(float yoffset) {
+		fov -= yoffset;
+		if (fov < 1.0f)
+			fov = 1.0f;
+		if (fov > 45.0f)
+			fov = 45.0f;
+	}
+
+	glm::highp_mat4 GetViewMatrix() const {
+		glm::vec3 front;
+		front.x = cos(transform.rotation.y) * cos(transform.rotation.x);
+		front.y = sin(transform.rotation.x);
+		front.z = sin(transform.rotation.y) * cos(transform.rotation.x);
+		return glm::lookAt(transform.position, transform.position + glm::normalize(front), glm::vec3(0.0f, 1.0f, 0.0f));
+	}
+
+	glm::highp_mat4 GetProjectionMatrix() const {
+		return glm::perspective(glm::radians(fov), aspect_ratio, near_plane, far_plane);
+	}
+};
+
 // 三角形の頂点座標
 inline float triangle_vertex[9] = {
 	// 1つ目の三角形
@@ -214,6 +328,9 @@ int main(int argc, char* argv[]) {
 	float playerSize = 50.0f;
 	float cameraSpeed = 2.5f;
 
+	std::unique_ptr<Camera> camera = std::make_unique<Camera>(true); // デバッグ用カメラを作成
+
+
 	glm::vec3 cameraPos(0.0f, 0.0f, 3.0f);
 	glm::vec3 cameraFront(0.0f, 0.0f, -1.0f);
 	glm::vec3 cameraUp(0.0f, 1.0f, 0.0f);
@@ -291,19 +408,19 @@ int main(int argc, char* argv[]) {
 		float cameraSpeedDelta = cameraSpeed * deltaTime;
 		if (Engine::Input::GetKey(SDL_SCANCODE_W)) {
 			// playerY -= moveDistance;
-			cameraPos += cameraSpeedDelta * cameraFront;
+			camera->ProcessMovement(MoveDirection::FORWARD, cameraSpeed, deltaTime);
 		}
 		if (Engine::Input::GetKey(SDL_SCANCODE_S)) {
 			// playerY += moveDistance;
-			cameraPos -= cameraSpeedDelta * cameraFront;
+			camera->ProcessMovement(MoveDirection::BACKWARD, cameraSpeed, deltaTime);
 		}
 		if (Engine::Input::GetKey(SDL_SCANCODE_A)) {
 			// playerX -= moveDistance;
-			cameraPos -= glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeedDelta;
+			camera->ProcessMovement(MoveDirection::LEFT, cameraSpeed, deltaTime);
 		}
 		if (Engine::Input::GetKey(SDL_SCANCODE_D)) {
 			// playerX += moveDistance;
-			cameraPos += glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeedDelta;
+			camera->ProcessMovement(MoveDirection::RIGHT, cameraSpeed, deltaTime);
 		}
 		if(Engine::Input::GetKey(SDL_SCANCODE_ESCAPE)) {
 			SDL_SetRelativeMouseMode(SDL_FALSE);
@@ -311,25 +428,11 @@ int main(int argc, char* argv[]) {
 
 		// マウスの動きによるカメラの向き変更
 		glm::vec2 mouseMotion = Engine::GetMouseMotion();
-		float mouseSensitivity = 30.0f;
-		yaw += mouseMotion.x * deltaTime * mouseSensitivity;
-		pitch -= mouseMotion.y * deltaTime * mouseSensitivity;
-
-		if (pitch > 89.0f) pitch = 89.0f;
-		if (pitch < -89.0f) pitch = -89.0f;
-
-		glm::vec3 direction;
-		direction.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
-		direction.y = sin(glm::radians(pitch));
-		direction.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
-		cameraFront = glm::normalize(direction);
+		camera->ProcessViewMovement(mouseMotion.x, mouseMotion.y);
 
 		// マウスホイールによるカメラのズーム
 		float mouseWheel = Engine::Input::GetMouseWheel();
-		fov -= mouseWheel * 15.0f*deltaTime; // ホイールの回転量に応じて視野角を調整
-		if (fov < 1.0f) fov = 1.0f;
-		if (fov > 45.0f) fov = 45.0f;
-
+		camera->ProcessZoom(mouseWheel);
 
 		// 画面外への飛び出し防止（クランプ処理）
 		if (screenWidth > 0 && screenHeight > 0) {
@@ -352,11 +455,11 @@ int main(int argc, char* argv[]) {
 
 		// ビュー行列の作成
 		glm::mat4 view = glm::mat4(1.0f);
-		view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
+		view = camera->GetViewMatrix();
 
 		// プロジェクション行列の作成
 		glm::mat4 projection = glm::mat4(1.0f);
-		projection = glm::perspective(glm::radians(fov), (float)screenWidth / (float)screenHeight, 0.1f, 100.0f);
+		projection = camera->GetProjectionMatrix();
 
 		// 画面クリア
 		Engine::Clear(0.1f, 0.12f, 0.15f, 1.0f);
