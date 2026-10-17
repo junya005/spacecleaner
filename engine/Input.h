@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include <SDL2/SDL.h>
 #include <unordered_map>
 
@@ -151,9 +151,23 @@ namespace Engine {
 		/// </remarks>
 		static bool GetKeyDown(SDL_Keycode keycode);
 
+		/// <summary>
+		/// グローバルアクセスにより、マウスホイールの回転方向と回転量を取得します。
+		/// </summary>
+		/// <returns>マウスホイールの回転量</returns>
+		/// <remarks>
+		/// <code>
+		/// float wheel = Engine::Input::GetMouseWheel();
+		/// </code>
+		/// </remarks>
+		static float GetMouseWheel();
+
 	private:
 		/// <summary>フレーム内で新しく押されたキーの打鍵フラグマップ（キーリピート除外）</summary>
 		std::unordered_map<SDL_Keycode, bool> m_key_downs;
+
+		/// <summary>マウスホイールの回転量</summary>
+		float m_mouse_wheel_y = 0.0f;
 
 		/// <summary>SDLが管理するキーボード配列全体のリアルタイム押下状態バッファへのポインタ</summary>
 		const Uint8* m_keyboard_state = nullptr;

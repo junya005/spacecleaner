@@ -3,6 +3,9 @@
 #include <imgui.h>
 #include <algorithm>
 #include <glad/glad.h>
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
 #include <fstream>
 #include <sstream>
 #include <iostream>
@@ -19,6 +22,21 @@ namespace Engine {
 		return buffer.str();
 	}
 
+	inline std::string LoadFileToString(const char* filePath) {
+		return LoadFileToString(std::string(filePath));
+	}
+
+	// 毎回 / 1000.0f するのは面倒なので、秒単位で取得する関数を用意
+	inline float GetTime(){
+		return SDL_GetTicks() / 1000.0f;
+	}
+
+	inline glm::vec2 GetMouseMotion(){
+		int x, y;
+		SDL_GetRelativeMouseState(&x, &y);
+		return glm::vec2(x, y);
+	}
+
 	class Shader {
 	public:
 		unsigned int ID;
@@ -31,8 +49,90 @@ namespace Engine {
 		void setVec2(const std::string& name, float x, float y) const;
 		void setVec3(const std::string& name, float x, float y, float z) const;
 		void setVec4(const std::string& name, float x, float y, float z, float w) const;
-	private:
+		void setMat4(const std::string& name, const glm::mat4& mat) const;
 	};
+
+	Shader::Shader(const char* vertexPath, const char* fragmentPath) {
+		// 頂点シェーダーのロード
+		std::string vertexShaderSource = Engine::LoadFileToString(vertexPath);
+		unsigned int vertexShader = glCreateShader(GL_VERTEX_SHADER);
+		const char* vertexShaderSourceCStr = vertexShaderSource.c_str();
+		glShaderSource(vertexShader, 1, &vertexShaderSourceCStr, NULL);
+		glCompileShader(vertexShader);
+	
+		int  success;
+		char infoLog[512];
+		glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &success);
+
+		if (!success)
+		{
+			glGetShaderInfoLog(vertexShader, 512, NULL, infoLog);
+			std::cout << "ERROR::SHADER::VERTEX::COMPILATION_FAILED\n" << infoLog << std::endl;
+		}
+
+		// フラグメントシェーダーのロード
+		std::string fragmentShaderSource = Engine::LoadFileToString(fragmentPath);
+		unsigned int fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
+		const char* fragmentShaderSourceCStr = fragmentShaderSource.c_str();
+		glShaderSource(fragmentShader, 1, &fragmentShaderSourceCStr, NULL);
+		glCompileShader(fragmentShader);
+
+		glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &success);
+
+		if (!success)
+		{
+			glGetShaderInfoLog(fragmentShader, 512, NULL, infoLog);
+			std::cout << "ERROR::SHADER::FRAGMENT::COMPILATION_FAILED\n" << infoLog << std::endl;
+		}
+
+		// シェーダープログラムの作成
+		ID = glCreateProgram();
+		glAttachShader(ID, vertexShader);
+		glAttachShader(ID, fragmentShader);
+		glLinkProgram(ID);
+
+		glGetProgramiv(ID, GL_LINK_STATUS, &success);
+
+		if(!success) {
+			glGetProgramInfoLog(ID, 512, NULL, infoLog);
+			std::cout << "ERROR::SHADER::PROGRAM::LINKING_FAILED\n" << infoLog << std::endl;
+		}
+
+		glDeleteShader(vertexShader);
+		glDeleteShader(fragmentShader);
+	}
+
+	void Shader::use() {
+		glUseProgram(ID);
+	}
+
+	void Shader::setBool(const std::string& name, bool value) const {
+		glUniform1i(glGetUniformLocation(ID, name.c_str()), (int)value);
+	}
+
+	void Shader::setInt(const std::string& name, int value) const {
+		glUniform1i(glGetUniformLocation(ID, name.c_str()), value);
+	}
+	
+	void Shader::setFloat(const std::string& name, float value) const {
+		glUniform1f(glGetUniformLocation(ID, name.c_str()), value);
+	}
+
+	void Shader::setVec2(const std::string& name, float x, float y) const {
+		glUniform2f(glGetUniformLocation(ID, name.c_str()), x, y);
+	}
+
+	void Shader::setVec3(const std::string& name, float x, float y, float z) const {
+		glUniform3f(glGetUniformLocation(ID, name.c_str()), x, y, z);
+	}
+
+	void Shader::setVec4(const std::string& name, float x, float y, float z, float w) const {
+		glUniform4f(glGetUniformLocation(ID, name.c_str()), x, y, z, w);
+	}
+
+	void Shader::setMat4(const std::string& name, const glm::mat4& mat) const {
+		glUniformMatrix4fv(glGetUniformLocation(ID, name.c_str()), 1, GL_FALSE, glm::value_ptr(mat));
+	}
 }
 
 // 三角形の頂点座標
@@ -48,6 +148,51 @@ inline float triangle_vertex2[9] = {
 	0.5f,  -0.5f, 0.0f, // 左下頂点
 	1.5f, -0.5f, 0.0f, // 右下頂点
 	1.0f, 0.5f, 0.0f  // 上頂点
+};
+
+// 立方体の頂点データ
+inline float cube_vertices[] = {
+	-0.5f, -0.5f, -0.5f,  0.0f, 0.0f,
+	 0.5f, -0.5f, -0.5f,  1.0f, 0.0f,
+	 0.5f,  0.5f, -0.5f,  1.0f, 1.0f,
+	 0.5f,  0.5f, -0.5f,  1.0f, 1.0f,
+	-0.5f,  0.5f, -0.5f,  0.0f, 1.0f,
+	-0.5f, -0.5f, -0.5f,  0.0f, 0.0f,
+
+	-0.5f, -0.5f,  0.5f,  0.0f, 0.0f,
+	 0.5f, -0.5f,  0.5f,  1.0f, 0.0f,
+	 0.5f,  0.5f,  0.5f,  1.0f, 1.0f,
+	 0.5f,  0.5f,  0.5f,  1.0f, 1.0f,
+	-0.5f,  0.5f,  0.5f,  0.0f, 1.0f,
+	-0.5f, -0.5f,  0.5f,  0.0f, 0.0f,
+
+	-0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
+	-0.5f,  0.5f, -0.5f,  1.0f, 1.0f,
+	-0.5f, -0.5f, -0.5f,  0.0f, 1.0f,
+	-0.5f, -0.5f, -0.5f,  0.0f, 1.0f,
+	-0.5f, -0.5f,  0.5f,  0.0f, 0.0f,
+	-0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
+
+	 0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
+	 0.5f,  0.5f, -0.5f,  1.0f, 1.0f,
+	 0.5f, -0.5f, -0.5f,  0.0f, 1.0f,
+	 0.5f, -0.5f, -0.5f,  0.0f, 1.0f,
+	 0.5f, -0.5f,  0.5f,  0.0f, 0.0f,
+	 0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
+
+	-0.5f, -0.5f, -0.5f,  0.0f, 1.0f,
+	 0.5f, -0.5f, -0.5f,  1.0f, 1.0f,
+	 0.5f, -0.5f,  0.5f,  1.0f, 0.0f,
+	 0.5f, -0.5f,  0.5f,  1.0f, 0.0f,
+	-0.5f, -0.5f,  0.5f,  0.0f, 0.0f,
+	-0.5f, -0.5f, -0.5f,  0.0f, 1.0f,
+
+	-0.5f,  0.5f, -0.5f,  0.0f, 1.0f,
+	 0.5f,  0.5f, -0.5f,  1.0f, 1.0f,
+	 0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
+	 0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
+	-0.5f,  0.5f,  0.5f,  0.0f, 0.0f,
+	-0.5f,  0.5f, -0.5f,  0.0f, 1.0f
 };
 
 /// <summary>
@@ -67,8 +212,24 @@ int main(int argc, char* argv[]) {
 	float playerY = 100.0f;
 	float playerSpeed = 300.0f;
 	float playerSize = 50.0f;
+	float cameraSpeed = 2.5f;
+
+	glm::vec3 cameraPos(0.0f, 0.0f, 3.0f);
+	glm::vec3 cameraFront(0.0f, 0.0f, -1.0f);
+	glm::vec3 cameraUp(0.0f, 1.0f, 0.0f);
+	float yaw = -90.0f;
+	float pitch = 0.0f;
+
+	float fov = 45.0f; // 視野角（Field of View）
+
+	int screenWidth = Engine::Window::Width();
+	int screenHeight = Engine::Window::Height();
+
 
 	// Hello Triangle: https://learnopengl.com/Getting-started/Hello-Triangle
+
+	// 深度テストを有効化
+	glEnable(GL_DEPTH_TEST);
 	
 	// VAOの作成とバインド
 	unsigned int triangleVAOs[2];
@@ -95,104 +256,134 @@ int main(int argc, char* argv[]) {
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
 	glEnableVertexAttribArray(0);
 
+	// 立方体のVAOとVBOの作成
+	unsigned int cubeVAO, cubeVBO;
+	glGenVertexArrays(1, &cubeVAO);
+	glBindVertexArray(cubeVAO);
+	glGenBuffers(1, &cubeVBO);
+	glBindVertexArray(cubeVAO);
+
+	// 立方体の頂点バッファのバインドとデータ転送
+	glBindBuffer(GL_ARRAY_BUFFER, cubeVBO);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(cube_vertices), cube_vertices, GL_STATIC_DRAW);
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
+	glEnableVertexAttribArray(0);
+
 #pragma region Create Shader Program
 
-	// 頂点シェーダーのロード
-	std::string vertexShaderSource = Engine::LoadFileToString("assets/shader/simple_vertex_shader.glsl");
-	unsigned int vertexShader = glCreateShader(GL_VERTEX_SHADER);
-	const char* vertexShaderSourceCStr = vertexShaderSource.c_str();
-	glShaderSource(vertexShader, 1, &vertexShaderSourceCStr, NULL);
-	glCompileShader(vertexShader);
-	
-	int  success;
-	char infoLog[512];
-	glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &success);
-
-	if (!success)
-	{
-		glGetShaderInfoLog(vertexShader, 512, NULL, infoLog);
-		std::cout << "ERROR::SHADER::VERTEX::COMPILATION_FAILED\n" << infoLog << std::endl;
-	}
-
-	// フラグメントシェーダーのロード
-	std::string fragmentShaderSource = Engine::LoadFileToString("assets/shader/simple_fragment_shader.glsl");
-	unsigned int fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-	const char* fragmentShaderSourceCStr = fragmentShaderSource.c_str();
-	glShaderSource(fragmentShader, 1, &fragmentShaderSourceCStr, NULL);
-	glCompileShader(fragmentShader);
-
-	glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &success);
-
-	if (!success)
-	{
-		glGetShaderInfoLog(fragmentShader, 512, NULL, infoLog);
-		std::cout << "ERROR::SHADER::FRAGMENT::COMPILATION_FAILED\n" << infoLog << std::endl;
-	}
-
-	// シェーダープログラムの作成
-	unsigned int shaderProgram = glCreateProgram();
-	glAttachShader(shaderProgram, vertexShader);
-	glAttachShader(shaderProgram, fragmentShader);
-	glLinkProgram(shaderProgram);
-
-	glGetProgramiv(shaderProgram, GL_LINK_STATUS, &success);
-
-	if(!success) {
-		glGetProgramInfoLog(shaderProgram, 512, NULL, infoLog);
-		std::cout << "ERROR::SHADER::PROGRAM::LINKING_FAILED\n" << infoLog << std::endl;
-	}
-
-	glDeleteShader(vertexShader);
-	glDeleteShader(fragmentShader);
+	std::unique_ptr<Engine::Shader> shaderProgram = 
+		std::make_unique<Engine::Shader>(
+			"assets/shader/simple_vertex_shader.glsl", 
+			"assets/shader/simple_fragment_shader.glsl"
+		);
 
 #pragma endregion
-	
+
+	SDL_SetRelativeMouseMode(SDL_TRUE);
+			
 	// 2. メインゲームループ
 	while (Engine::ProcessEvents()) {
 		float deltaTime = Engine::Time::GetDeltaTime();
 
+		
 		// WASDキー入力によるプレイヤー移動
 		float moveDistance = playerSpeed * deltaTime;
+		float cameraSpeedDelta = cameraSpeed * deltaTime;
 		if (Engine::Input::GetKey(SDL_SCANCODE_W)) {
-			playerY -= moveDistance;
+			// playerY -= moveDistance;
+			cameraPos += cameraSpeedDelta * cameraFront;
 		}
 		if (Engine::Input::GetKey(SDL_SCANCODE_S)) {
-			playerY += moveDistance;
+			// playerY += moveDistance;
+			cameraPos -= cameraSpeedDelta * cameraFront;
 		}
 		if (Engine::Input::GetKey(SDL_SCANCODE_A)) {
-			playerX -= moveDistance;
+			// playerX -= moveDistance;
+			cameraPos -= glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeedDelta;
 		}
 		if (Engine::Input::GetKey(SDL_SCANCODE_D)) {
-			playerX += moveDistance;
+			// playerX += moveDistance;
+			cameraPos += glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeedDelta;
+		}
+		if(Engine::Input::GetKey(SDL_SCANCODE_ESCAPE)) {
+			SDL_SetRelativeMouseMode(SDL_FALSE);
 		}
 
+		// マウスの動きによるカメラの向き変更
+		glm::vec2 mouseMotion = Engine::GetMouseMotion();
+		float mouseSensitivity = 30.0f;
+		yaw += mouseMotion.x * deltaTime * mouseSensitivity;
+		pitch -= mouseMotion.y * deltaTime * mouseSensitivity;
+
+		if (pitch > 89.0f) pitch = 89.0f;
+		if (pitch < -89.0f) pitch = -89.0f;
+
+		glm::vec3 direction;
+		direction.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
+		direction.y = sin(glm::radians(pitch));
+		direction.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
+		cameraFront = glm::normalize(direction);
+
+		// マウスホイールによるカメラのズーム
+		float mouseWheel = Engine::Input::GetMouseWheel();
+		fov -= mouseWheel * 15.0f*deltaTime; // ホイールの回転量に応じて視野角を調整
+		if (fov < 1.0f) fov = 1.0f;
+		if (fov > 45.0f) fov = 45.0f;
+
+
 		// 画面外への飛び出し防止（クランプ処理）
-		int screenWidth = Engine::Window::Width();
-		int screenHeight = Engine::Window::Height();
 		if (screenWidth > 0 && screenHeight > 0) {
 			playerX = std::clamp(playerX, 0.0f, static_cast<float>(screenWidth) - playerSize);
 			playerY = std::clamp(playerY, 0.0f, static_cast<float>(screenHeight) - playerSize);
 		}
 
+		// vectorの変換テスト
+		/*
+		glm::vec4 vec(1.0f, 0.0f, 0.0f, 1.0f);
+		glm::mat4 trans = glm::mat4(1.0f);
+		trans = glm::rotate(trans, Engine::GetTime(), glm::vec3(0.0f, 0.0f, 1.0f));
+		trans = glm::scale(trans, glm::vec3(0.5f, 0.5f, 0.5f));
+		vec = trans * vec;
+		*/
+
+		// モデルマトリックスの作成
+		glm::mat4 model = glm::mat4(1.0f);
+		model = glm::rotate(model, glm::radians(-55.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+
+		// ビュー行列の作成
+		glm::mat4 view = glm::mat4(1.0f);
+		view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
+
+		// プロジェクション行列の作成
+		glm::mat4 projection = glm::mat4(1.0f);
+		projection = glm::perspective(glm::radians(fov), (float)screenWidth / (float)screenHeight, 0.1f, 100.0f);
+
 		// 画面クリア
 		Engine::Clear(0.1f, 0.12f, 0.15f, 1.0f);
+		// 後でEngine::Clear()に追加
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 		// シェーダーに値を送信する
-		float time = SDL_GetTicks() / 1000.0f;
-		float greenValue = (sin(time) / 2.0f) + 0.5f;
-		// uniform変数の取得
-		int vertexColorLocation = glGetUniformLocation(shaderProgram, "ourColor");
-		glUseProgram(shaderProgram);
-		glUniform4f(vertexColorLocation, 0.0f, greenValue, 0.0f, 1.0f);
-
-		// Hello Triangle: 描画処理
-		glUseProgram(shaderProgram);
-		glBindVertexArray(triangleVAOs[0]);
-		glDrawArrays(GL_TRIANGLES, 0, 3);
-
-		glBindVertexArray(triangleVAOs[1]);
-		glDrawArrays(GL_TRIANGLES, 0, 3);
+		// float time = Engine::GetTime();
+		// float greenValue = (sin(time) / 2.0f) + 0.5f;
+		shaderProgram->use();
+		shaderProgram->setMat4("model", model);
+		shaderProgram->setMat4("view", view);
+		shaderProgram->setMat4("projection", projection);
+		shaderProgram->setVec4("ourColor", 0.0f, 1.0f, 0.0f, 1.0f);
 		
+		// Hello Triangle: 描画処理
+		shaderProgram->use();
+		// glBindVertexArray(triangleVAOs[0]);
+		// glDrawArrays(GL_TRIANGLES, 0, 3);
+
+		// glBindVertexArray(triangleVAOs[1]);
+		// glDrawArrays(GL_TRIANGLES, 0, 3);
+
+		// 立方体の描画
+		glBindVertexArray(cubeVAO);
+		glDrawArrays(GL_TRIANGLES, 0, 36);
+	
 		// ImGui フレーム開始
 		Engine::BeginImGui();
 

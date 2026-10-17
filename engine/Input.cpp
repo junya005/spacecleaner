@@ -1,4 +1,4 @@
-#include "Input.h"
+﻿#include "Input.h"
 
 namespace Engine
 {
@@ -29,6 +29,13 @@ namespace Engine
 			if (e.key.repeat == 0) {
 				m_key_downs[e.key.keysym.sym] = true;
 			}
+		} 
+		
+		if (e.type == SDL_MOUSEWHEEL) {
+			m_mouse_wheel_y = static_cast<float>(e.wheel.y);
+		}
+		else {
+			m_mouse_wheel_y = 0.0f;
 		}
 	}
 
@@ -72,5 +79,12 @@ namespace Engine
 			return s_instance->IsKeyDown(keycode);
 		}
 		return false;
+	}
+
+	float Input::GetMouseWheel() {
+		if (s_instance) {
+			return s_instance->m_mouse_wheel_y;
+		}
+		return 0.0f;
 	}
 }
